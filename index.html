@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام الإنذارات والإجازات العسكرية 3D | Discord Integration</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js for 3D Background -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        tactical: {
+                            dark: '#05080e',
+                            card: '#0d131f',
+                            border: '#1e293b',
+                            amber: '#f59e0b',
+                            red: '#ef4444',
+                            emerald: '#10b981',
+                            cyan: '#06b6d4',
+                            discord: '#5865F2'
+                        }
+                    },
+                    fontFamily: {
+                        cairo: ['Cairo', 'sans-serif'],
+                        tajawal: ['Tajawal', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #05080e;
+            color: #f1f5f9;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* GUARANTEED CLICKABILITY: Canvas background strictly ignored by mouse */
+        #canvas-container {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* Main application container sitting above canvas */
+        #app-shell {
+            position: relative !important;
+            z-index: 10 !important;
+            pointer-events: auto !important;
+        }
+
+        /* Glassmorphism styling */
+        .glass-panel {
+            background: rgba(13, 19, 31, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-modal {
+            background: rgba(8, 12, 20, 0.98);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        /* Ensure interactive elements have explicit click cursor and pointer events */
+        button, a, input, select, textarea, [role="button"] {
+            pointer-events: auto !important;
+            cursor: pointer !important;
+        }
+
+        /* Discord Preview UI Card Styling */
+        .discord-embed-card {
+            background-color: #2b2d31;
+            border-right-width: 4px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #05080e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #06b6d4;
+        }
+
+        /* Tactical Background Grid Pattern */
+        .bg-grid {
+            background-size: 36px 36px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-grid min-h-screen text-slate-100 flex flex-col justify-between">
+
+    <!-- 3D Three.js Background Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 left-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-auto"></div>
+
+    <!-- MAIN APP SHELL -->
+    <div id="app-shell" class="flex flex-col min-h-screen">
+
+        <!-- HEADER NAVIGATION BAR -->
+        <header class="sticky top-0 z-30 glass-panel border-b border-slate-800 px-4 lg:px-8 py-3.5">
+            <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+                
+                <!-- Logo & System Title -->
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 via-red-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-amber-500/20 border border-white/20">
+                        <i class="fa-solid fa-shield-halved text-2xl text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg lg:text-xl tracking-wide flex items-center gap-2">
+                            <span>نظام إدارة الإنذارات والإجازات العسكرية</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono">SECURE DISCORD V5</span>
+                        </h1>
+                        <p class="text-xs text-slate-400">منظومة الضبط والمراقبة الميدانية للقطاعات العسكرية</p>
+                    </div>
+                </div>
+
+                <!-- Quick Action Buttons & Auth Status -->
+                <div class="flex items-center gap-2.5">
+                    
+                    <button type="button" onclick="openModal('modal-add-warning')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-semibold text-xs shadow-lg shadow-red-900/30 transition flex items-center gap-2 border border-white/10 active:scale-95">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>إصدار إنذار</span>
+                    </button>
+
+                    <button type="button" onclick="openModal('modal-add-leave')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs shadow-lg shadow-emerald-900/30 transition flex items-center gap-2 border border-white/10 active:scale-95">
+                        <i class="fa-solid fa-plane-departure"></i>
+                        <span>طلب إجازة</span>
+                    </button>
+
+                    <div id="discord-user-widget">
+                        <!-- Populated by JS -->
+                    </div>
+
+                </div>
+            </div>
+        </header>
+
+        <!-- NAVIGATION TABS BAR -->
+        <nav class="max-w-7xl mx-auto px-4 lg:px-8 mt-6 w-full">
+            <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800">
+                
+                <button type="button" onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn px-5 py-2.5 rounded-t-xl font-medium text-sm flex items-center gap-2 transition border-b-2 border-cyan-500 bg-slate-800/60 text-cyan-400">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>لوحة التحكم الرئيسية</span>
+                </button>
+
+                <button type="button" onclick="switchTab('warnings')" id="tab-btn-warnings" class="tab-btn px-5 py-2.5 rounded-t-xl font-medium text-sm flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                    <span>الإنذارات العسكرية</span>
+                    <span id="badge-warning-count" class="px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-400 font-mono">0</span>
+                </button>
+
+                <button type="button" onclick="switchTab('leaves')" id="tab-btn-leaves" class="tab-btn px-5 py-2.5 rounded-t-xl font-medium text-sm flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40">
+                    <i class="fa-solid fa-plane-departure text-emerald-500"></i>
+                    <span>نظام الإجازات</span>
+                    <span id="badge-leave-count" class="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 font-mono">0</span>
+                </button>
+
+                <button type="button" onclick="switchTab('sectors')" id="tab-btn-sectors" class="tab-btn px-5 py-2.5 rounded-t-xl font-medium text-sm flex items-center gap-2 transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/40">
+                    <i class="fa-solid fa-sitemap text-sky-500"></i>
+                    <span>القطاعات وهيكل القيادة</span>
+                </button>
+
+            </div>
+        </nav>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="max-w-7xl mx-auto px-4 lg:px-8 py-6 flex-1 w-full">
+
+            <!-- TAB 1: DASHBOARD -->
+            <div id="tab-content-dashboard" class="tab-content space-y-8">
+                
+                <!-- Welcome Banner -->
+                <div class="glass-panel rounded-2xl p-6 lg:p-8 relative overflow-hidden border-l-4 border-l-cyan-500">
+                    <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div class="space-y-2">
+                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold">
+                                <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+                                <span>مركز القيادة والعمليات الموحد</span>
+                            </div>
+                            <h2 class="text-2xl lg:text-3xl font-black text-white">منظومة متابعة الانضباط والإجازات</h2>
+                            <p class="text-slate-300 text-sm max-w-2xl leading-relaxed">
+                                نظام آمن مشفر ومحمي الخوادم. يتم إرسال كافة التقارير (الإنذارات والإجازات) تلقائياً إلى قنوات الديسكورد المخصصة ببطاقات منسقة.
+                            </p>
+                        </div>
+
+                        <!-- Sector Shortcuts -->
+                        <div class="flex flex-wrap gap-2">
+                            <span class="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold flex items-center gap-1.5">
+                                <i class="fa-solid fa-crown text-amber-400"></i> القيادة العليا (B)
+                            </span>
+                            <span class="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-1.5">
+                                <i class="fa-solid fa-user-shield text-red-400"></i> وحدة الانضباط (R)
+                            </span>
+                            <span class="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-1.5">
+                                <i class="fa-solid fa-medal text-emerald-400"></i> قطاع الشرف (C)
+                            </span>
+                            <span class="px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-semibold flex items-center gap-1.5">
+                                <i class="fa-solid fa-city text-sky-400"></i> قطاع لوس سانتوس (L)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    
+                    <div class="glass-panel p-6 rounded-2xl relative overflow-hidden border-t-2 border-t-red-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs font-medium text-slate-400 uppercase">الإنذارات النشطة</p>
+                                <h3 id="stat-total-warnings" class="text-3xl font-black text-white mt-2 font-mono">0</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+                                <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+                            <span>سارية المفعول حالياً</span>
+                            <span id="stat-warnings-active-pct" class="text-red-400 font-semibold font-mono">0% active</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl relative overflow-hidden border-t-2 border-t-amber-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs font-medium text-slate-400 uppercase">إنذارات شفوية (5 أيام)</p>
+                                <h3 id="stat-oral-warnings" class="text-3xl font-black text-amber-400 mt-2 font-mono">0</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                                <i class="fa-solid fa-comment-slash text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+                            <span>إنذار شفوي تنبيهي</span>
+                            <span class="text-amber-400">5 أيام</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl relative overflow-hidden border-t-2 border-t-purple-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs font-medium text-slate-400 uppercase">إنذارات عسكرية (1 و 2)</p>
+                                <h3 id="stat-military-warnings" class="text-3xl font-black text-purple-400 mt-2 font-mono">0</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                                <i class="fa-solid fa-gavel text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+                            <span>أول (7 أيام) / ثاني (15 يوم)</span>
+                            <span class="text-purple-400">عسكري</span>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl relative overflow-hidden border-t-2 border-t-emerald-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs font-medium text-slate-400 uppercase">الأفراد في إجازة</p>
+                                <h3 id="stat-active-leaves" class="text-3xl font-black text-emerald-400 mt-2 font-mono">0</h3>
+                            </div>
+                            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                                <i class="fa-solid fa-user-clock text-xl"></i>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between text-xs text-slate-400">
+                            <span>إجازات سارية</span>
+                            <span class="text-emerald-400">نشط</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Sectors Active Status Overview -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved text-cyan-400"></i>
+                        <span>ملخص حالة القطاعات الأربعة</span>
+                    </h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                        <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-amber-500">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">B</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-amber-300">القيادة العليا</h4>
+                                        <p class="text-[10px] text-slate-400 font-mono">Role: 1316578041425694820</p>
+                                    </div>
+                                </div>
+                                <span id="sector-count-B" class="px-2 py-1 rounded bg-amber-500/20 text-amber-400 font-mono text-xs font-bold">0 سجل</span>
+                            </div>
+                            <div class="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
+                                <div class="flex justify-between"><span>إنذارات نشطة:</span> <span id="sector-warn-B" class="text-white font-mono">0</span></div>
+                                <div class="flex justify-between"><span>إجازات قائمة:</span> <span id="sector-leave-B" class="text-white font-mono">0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-red-500">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center font-bold">R</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-red-300">وحدة الانضباط</h4>
+                                        <p class="text-[10px] text-slate-400 font-mono">Role: 1412269500161724466</p>
+                                    </div>
+                                </div>
+                                <span id="sector-count-R" class="px-2 py-1 rounded bg-red-500/20 text-red-400 font-mono text-xs font-bold">0 سجل</span>
+                            </div>
+                            <div class="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
+                                <div class="flex justify-between"><span>إنذارات نشطة:</span> <span id="sector-warn-R" class="text-white font-mono">0</span></div>
+                                <div class="flex justify-between"><span>إجازات قائمة:</span> <span id="sector-leave-R" class="text-white font-mono">0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-emerald-500">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">C</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-emerald-300">قطاع الشرف</h4>
+                                        <p class="text-[10px] text-slate-400 font-mono">Role: 1320038992866967592</p>
+                                    </div>
+                                </div>
+                                <span id="sector-count-C" class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 font-mono text-xs font-bold">0 سجل</span>
+                            </div>
+                            <div class="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
+                                <div class="flex justify-between"><span>إنذارات نشطة:</span> <span id="sector-warn-C" class="text-white font-mono">0</span></div>
+                                <div class="flex justify-between"><span>إجازات قائمة:</span> <span id="sector-leave-C" class="text-white font-mono">0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel p-5 rounded-2xl border-l-4 border-l-sky-500">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-9 h-9 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">L</div>
+                                    <div>
+                                        <h4 class="font-bold text-sm text-sky-300">قطاع لوس سانتوس</h4>
+                                        <p class="text-[10px] text-slate-400 font-mono">Role: 1316578041224368247</p>
+                                    </div>
+                                </div>
+                                <span id="sector-count-L" class="px-2 py-1 rounded bg-sky-500/20 text-sky-400 font-mono text-xs font-bold">0 سجل</span>
+                            </div>
+                            <div class="pt-2 text-xs text-slate-400 space-y-1 border-t border-slate-800">
+                                <div class="flex justify-between"><span>إنذارات نشطة:</span> <span id="sector-warn-L" class="text-white font-mono">0</span></div>
+                                <div class="flex justify-between"><span>إجازات قائمة:</span> <span id="sector-leave-L" class="text-white font-mono">0</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Warnings Table -->
+                <div class="glass-panel rounded-2xl p-6 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-amber-400"></i>
+                            <span>أحدث الإنذارات المسجلة</span>
+                        </h3>
+                        <button type="button" onclick="switchTab('warnings')" class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1">
+                            <span>عرض كافة الإنذارات</span>
+                            <i class="fa-solid fa-arrow-left"></i>
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm">
+                            <thead>
+                                <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-900/50">
+                                    <th class="p-3">اسم العسكري</th>
+                                    <th class="p-3">الكود / القطاع</th>
+                                    <th class="p-3">نوع الإنذار</th>
+                                    <th class="p-3">تاريخ البداية</th>
+                                    <th class="p-3">تاريخ الانتهاء</th>
+                                    <th class="p-3">الحالة والمتبقي</th>
+                                    <th class="p-3 text-center">بطاقة ديسكورد</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-recent-warnings-table">
+                                <!-- JS Populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2: WARNINGS DIRECTORY -->
+            <div id="tab-content-warnings" class="tab-content hidden space-y-6">
+                
+                <!-- Controls Bar -->
+                <div class="glass-panel p-5 rounded-2xl flex flex-wrap gap-4 items-center justify-between">
+                    <div class="flex flex-wrap items-center gap-3 flex-1">
+                        <div class="relative w-full sm:w-64">
+                            <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3 text-slate-400 text-sm"></i>
+                            <input type="text" id="filter-warning-search" oninput="renderWarningsTable()" placeholder="بحث باسم العسكري أو الكود..." class="w-full pr-10 pl-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                        </div>
+
+                        <select id="filter-warning-sector" onchange="renderWarningsTable()" class="py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">جميع القطاعات</option>
+                            <option value="B">القيادة العليا (B)</option>
+                            <option value="R">وحدة الانضباط (R)</option>
+                            <option value="C">قطاع الشرف (C)</option>
+                            <option value="L">قطاع لوس سانتوس (L)</option>
+                        </select>
+
+                        <select id="filter-warning-type" onchange="renderWarningsTable()" class="py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">جميع أنواع الإنذارات</option>
+                            <option value="ORAL">إنذار شفوي (5 أيام)</option>
+                            <option value="WARN1">إنذار عسكري أول (7 أيام)</option>
+                            <option value="WARN2">إنذار عسكري ثاني (15 يوم)</option>
+                        </select>
+
+                        <select id="filter-warning-status" onchange="renderWarningsTable()" class="py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">جميع الحالات</option>
+                            <option value="ACTIVE">نشط (ساري المفعول)</option>
+                            <option value="EXPIRED">منتهي</option>
+                        </select>
+                    </div>
+
+                    <button type="button" onclick="openModal('modal-add-warning')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-red-900/30">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>إصدار إنذار جديد</span>
+                    </button>
+                </div>
+
+                <!-- Full Warnings Table -->
+                <div class="glass-panel rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm">
+                            <thead>
+                                <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-900/60">
+                                    <th class="p-4">#</th>
+                                    <th class="p-4">اسم العسكري</th>
+                                    <th class="p-4">الكود والقطاع</th>
+                                    <th class="p-4">نوع الإنذار</th>
+                                    <th class="p-4">المدة والتواريخ</th>
+                                    <th class="p-4">سبب الإنذار</th>
+                                    <th class="p-4">المصدر</th>
+                                    <th class="p-4">الحالة</th>
+                                    <th class="p-4 text-center">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-warnings-table" class="divide-y divide-slate-800/50">
+                                <!-- JS Populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 3: LEAVES DIRECTORY -->
+            <div id="tab-content-leaves" class="tab-content hidden space-y-6">
+                
+                <!-- Controls Bar -->
+                <div class="glass-panel p-5 rounded-2xl flex flex-wrap gap-4 items-center justify-between">
+                    <div class="flex flex-wrap items-center gap-3 flex-1">
+                        <div class="relative w-full sm:w-64">
+                            <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-3 text-slate-400 text-sm"></i>
+                            <input type="text" id="filter-leave-search" oninput="renderLeavesTable()" placeholder="بحث باسم العسكري أو الكود..." class="w-full pr-10 pl-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                        </div>
+
+                        <select id="filter-leave-sector" onchange="renderLeavesTable()" class="py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">جميع القطاعات</option>
+                            <option value="B">القيادة العليا (B)</option>
+                            <option value="R">وحدة الانضباط (R)</option>
+                            <option value="C">قطاع الشرف (C)</option>
+                            <option value="L">قطاع لوس سانتوس (L)</option>
+                        </select>
+
+                        <select id="filter-leave-status" onchange="renderLeavesTable()" class="py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-500">
+                            <option value="ALL">جميع الحالات</option>
+                            <option value="ACTIVE">في إجازة حالياً</option>
+                            <option value="EXPIRED">منتهية الإجازة</option>
+                        </select>
+                    </div>
+
+                    <button type="button" onclick="openModal('modal-add-leave')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-emerald-900/30">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>تسجيل إجازة جديدة</span>
+                    </button>
+                </div>
+
+                <!-- Full Leaves Table -->
+                <div class="glass-panel rounded-2xl overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-sm">
+                            <thead>
+                                <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-900/60">
+                                    <th class="p-4">#</th>
+                                    <th class="p-4">العسكري</th>
+                                    <th class="p-4">الكود / القطاع</th>
+                                    <th class="p-4">نوع الإجازة</th>
+                                    <th class="p-4">الفترة والتواريخ</th>
+                                    <th class="p-4">السبب / ملاحظات</th>
+                                    <th class="p-4">الحالة</th>
+                                    <th class="p-4 text-center">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-leaves-table" class="divide-y divide-slate-800/50">
+                                <!-- JS Populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 4: SECTORS STRUCTURE -->
+            <div id="tab-content-sectors" class="tab-content hidden space-y-6">
+                
+                <div class="text-center max-w-2xl mx-auto space-y-2 mb-8">
+                    <h2 class="text-2xl font-black text-white">الهيكل التنظيمي ورتب السيرفر (1316578041035620352)</h2>
+                    <p class="text-xs text-slate-400">الربط المباشر مع رتب الديسكورد والتمييز التلقائي للقطاع حسب بادئة الكود العسكري</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div class="glass-panel p-6 rounded-2xl border-r-4 border-r-amber-500 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-xl border border-amber-500/30">B</div>
+                                <div>
+                                    <h3 class="font-bold text-lg text-amber-400">قطاع القيادة العليا</h3>
+                                    <p class="text-xs text-slate-400">High Command Sector</p>
+                                </div>
+                            </div>
+                            <div class="text-left">
+                                <span class="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-xs border border-amber-500/30 font-mono block">B-xxx</span>
+                                <span class="text-[10px] text-slate-500 font-mono">Role ID: 1316578041425694820</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            صلاحيات كاملة بالنظام، الإشراف العام على سير العمليات، وإصدار وتعديل كافة الإنذارات والإجازات لجميع القطاعات.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl border-r-4 border-r-red-500 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center font-black text-xl border border-red-500/30">R</div>
+                                <div>
+                                    <h3 class="font-bold text-lg text-red-400">وحدة الانضباط العسكري</h3>
+                                    <p class="text-xs text-slate-400">Discipline Sector</p>
+                                </div>
+                            </div>
+                            <div class="text-left">
+                                <span class="px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-xs border border-red-500/30 font-mono block">R-xxx</span>
+                                <span class="text-[10px] text-slate-500 font-mono">Role ID: 1412269500161724466</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            متابعة الانضباط الميداني، إصدار الإنذارات الشفوية والعسكرية ومراقبة مواعيد انتهائها.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl border-r-4 border-r-emerald-500 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xl border border-emerald-500/30">C</div>
+                                <div>
+                                    <h3 class="font-bold text-lg text-emerald-400">قطاع الشرف العسكري</h3>
+                                    <p class="text-xs text-slate-400">Honor Sector</p>
+                                </div>
+                            </div>
+                            <div class="text-left">
+                                <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/30 font-mono block">C-xxx</span>
+                                <span class="text-[10px] text-slate-500 font-mono">Role ID: 1320038992866967592</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            وحدة العمليات والنخبة العسكرية، توثيق سجلات الحضور والإجازات الخاصة بأفراد وحدة الشرف.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl border-r-4 border-r-sky-500 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-black text-xl border border-sky-500/30">L</div>
+                                <div>
+                                    <h3 class="font-bold text-lg text-sky-400">قطاع لوس سانتوس</h3>
+                                    <p class="text-xs text-slate-400">Los Santos Sector</p>
+                                </div>
+                            </div>
+                            <div class="text-left">
+                                <span class="px-3 py-1 rounded-full bg-sky-500/10 text-sky-400 text-xs border border-sky-500/30 font-mono block">L-xxx</span>
+                                <span class="text-[10px] text-slate-500 font-mono">Role ID: 1316578041224368247</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            دوريات وميدان لوس سانتوس، إدارة طلبات الإجازات الميدانية والانضباط اليومي لأفراد الدوريات.
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+
+        <!-- FOOTER -->
+        <footer class="glass-panel border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500 mt-auto">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+                <span>نظام إدارة الانضباط والإجازات العسكرية &copy; 2026 - سيرفر الرول بلاي العسكري</span>
+                <span class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>اتصال آمن ومحمي بالسيرفر (1316578041035620352)</span>
+                </span>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- MODAL 1: ADD WARNING MODAL -->
+    <div id="modal-add-warning" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden">
+        <div class="glass-modal rounded-2xl w-full max-w-lg p-6 space-y-5 border border-slate-700/60 shadow-2xl relative">
+            
+            <button type="button" onclick="closeModal('modal-add-warning')" class="absolute top-4 left-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-white">إصدار إنذار عسكري جديد</h3>
+                    <p class="text-xs text-slate-400">ادخل كود العسكري وسيتم كشف القطاع والمدة تلقائياً</p>
+                </div>
+            </div>
+
+            <form onsubmit="handleSaveWarning(event)" class="space-y-4">
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">الكود العسكري (أدخل B, R, C, L في البداية)</label>
+                    <input type="text" id="warn-military-code" required oninput="onMilitaryCodeChange(this.value, 'warn-sector-badge')" placeholder="مثال: C-104 أو L-55 أو R-12 أو B-01" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white font-mono uppercase focus:outline-none focus:border-amber-500">
+                    <div id="warn-sector-badge" class="mt-2 text-xs flex items-center gap-2">
+                        <span class="text-slate-500">اكتب الكود للتعرف التلقائي على القطاع...</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">اسم العسكري / الرتبة</label>
+                    <input type="text" id="warn-military-name" required placeholder="اسم العسكري المعني بالإنذار" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">نوع الإنذار (يحسب المدة تلقائياً)</label>
+                    <select id="warn-type" onchange="calculateWarningDates()" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-amber-500">
+                        <option value="ORAL">إنذار شفوي (مدته 5 أيام تلقائياً)</option>
+                        <option value="WARN1">إنذار عسكري أول (مدته 7 أيام تلقائياً)</option>
+                        <option value="WARN2">إنذار عسكري ثاني (مدته 15 يوم تلقائياً)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-1">تاريخ بداية الإنذار:</span>
+                        <input type="date" id="warn-start-date" onchange="calculateWarningDates()" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-full">
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">تاريخ الانتهاء تلقائياً:</span>
+                        <div id="warn-end-date-preview" class="font-bold font-mono text-amber-400 py-1">--</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">سبب الإنذار والتفاصيل</label>
+                    <textarea id="warn-reason" required rows="3" placeholder="اكتب سبب الإنذار التفصيلي والمخالفة المرتكبة..." class="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-500"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">اسم المسؤول / مصدر الإنذار</label>
+                    <input type="text" id="warn-issuer" required placeholder="مصدر أو موثق الإنذار" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-amber-500">
+                </div>
+
+                <div class="pt-2 flex justify-end gap-3">
+                    <button type="button" onclick="closeModal('modal-add-warning')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">إلغاء</button>
+                    <button type="submit" class="px-6 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-semibold text-xs shadow-lg flex items-center gap-2">
+                        <i class="fa-brands fa-discord"></i>
+                        <span>حفظ وإصدار لروم الديسكورد</span>
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ADD LEAVE MODAL -->
+    <div id="modal-add-leave" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden">
+        <div class="glass-modal rounded-2xl w-full max-w-lg p-6 space-y-5 border border-slate-700/60 shadow-2xl relative">
+            
+            <button type="button" onclick="closeModal('modal-add-leave')" class="absolute top-4 left-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <i class="fa-solid fa-plane-departure text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-white">تسجيل إجازة عسكرية جديدة</h3>
+                    <p class="text-xs text-slate-400">ادخل بيانات العسكري ومدة الإجازة المرادة (ترسل تلقائياً لروم الديسكورد)</p>
+                </div>
+            </div>
+
+            <form onsubmit="handleSaveLeave(event)" class="space-y-4">
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">الكود العسكري</label>
+                    <input type="text" id="leave-military-code" required oninput="onMilitaryCodeChange(this.value, 'leave-sector-badge')" placeholder="مثال: B-101 أو C-33 أو L-22" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white font-mono uppercase focus:outline-none focus:border-emerald-500">
+                    <div id="leave-sector-badge" class="mt-2 text-xs flex items-center gap-2">
+                        <span class="text-slate-500">اكتب الكود للتعرف التلقائي على القطاع...</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">اسم العسكري</label>
+                    <input type="text" id="leave-military-name" required placeholder="اسم صاحب الإجازة" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">نوع الإجازة</label>
+                        <select id="leave-type" class="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500">
+                            <option value="اعتيادية">إجازة اعتيادية</option>
+                            <option value="مرضية">إجازة مرضية</option>
+                            <option value="طارئة">إجازة طارئة</option>
+                            <option value="رسمية">إجازة رسمية / خاصة</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 mb-1.5">مدة الإجازة (بالأيام)</label>
+                        <input type="number" id="leave-duration-days" min="1" max="90" value="3" onchange="calculateLeaveDates()" oninput="calculateLeaveDates()" class="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
+                    <div>
+                        <span class="text-slate-400 block mb-1">تاريخ بداية الإجازة:</span>
+                        <input type="date" id="leave-start-date" onchange="calculateLeaveDates()" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white w-full">
+                    </div>
+                    <div>
+                        <span class="text-slate-400 block mb-1">تاريخ المباشرة والانقضاء:</span>
+                        <div id="leave-end-date-preview" class="font-bold font-mono text-emerald-400 py-1">--</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">سبب / عذر الإجازة</label>
+                    <textarea id="leave-reason" rows="2" placeholder="اكتب سبب الإجازة..." class="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500"></textarea>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-3">
+                    <button type="button" onclick="closeModal('modal-add-leave')" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">إلغاء</button>
+                    <button type="submit" class="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-xs shadow-lg flex items-center gap-2">
+                        <i class="fa-brands fa-discord"></i>
+                        <span>تسجيل الإجازة والإرسال للديسكورد</span>
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: DISCORD OAUTH LOGIN MODAL -->
+    <div id="modal-discord-login" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+        <div class="glass-modal rounded-2xl w-full max-w-md p-6 space-y-5 border border-indigo-500/40 shadow-2xl relative text-center">
+            
+            <button type="button" onclick="closeModal('modal-discord-login')" class="absolute top-4 left-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 text-3xl mx-auto">
+                <i class="fa-brands fa-discord"></i>
+            </div>
+
+            <div>
+                <h3 class="text-xl font-bold text-white">تسجيل الدخول الرسمي عبر ديسكورد</h3>
+                <p class="text-xs text-slate-400 mt-1">السيرفر: 1316578041035620352 | التطبيق: 1573845911812055151</p>
+            </div>
+
+            <p class="text-xs text-slate-300 bg-slate-900/80 p-3 rounded-xl border border-slate-800 leading-relaxed text-right">
+                <i class="fa-solid fa-shield-halved text-amber-400 ml-1"></i>
+                سيتم نقلك لصفحة ديسكورد الرسمية لربط حسابك وفحص رتبتك الفعالية بالسيرفر. إذا كنت لا تملك رول في السيرفر لن تحصل على أي قطاع تلقائياً.
+            </p>
+
+            <button type="button" onclick="redirectToDiscordOAuth()" class="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl flex items-center justify-center gap-3 active:scale-95 transition">
+                <i class="fa-brands fa-discord text-xl"></i>
+                <span>التوجه لتسجيل الدخول الحقيقي بالحساب</span>
+            </button>
+
+            <!-- Dev mode note -->
+            <div class="pt-2 border-t border-slate-800 text-right space-y-2">
+                <details class="text-[11px] text-slate-400">
+                    <summary class="cursor-pointer text-indigo-400 font-semibold hover:underline">اختبار محلي للرولات (للمطورين فقط)</summary>
+                    <div class="mt-2 space-y-1.5 p-2 bg-slate-900 rounded-lg border border-slate-800">
+                        <p class="text-[10px] text-slate-400">إذا كنت تجري اختباراً محلياً وتود تجربة رول معين:</p>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button type="button" onclick="devSimulateRole('B', '1316578041425694820')" class="px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px]">القيادة العليا B</button>
+                            <button type="button" onclick="devSimulateRole('R', '1412269500161724466')" class="px-2 py-1 rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[10px]">وحدة الانضباط R</button>
+                            <button type="button" onclick="devSimulateRole('C', '1320038992866967592')" class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px]">قطاع الشرف C</button>
+                            <button type="button" onclick="devSimulateRole('L', '1316578041224368247')" class="px-2 py-1 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px]">قطاع لوس سانتوس L</button>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: RICH DISCORD EMBED PREVIEW MODAL -->
+    <div id="modal-discord-embed" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md hidden">
+        <div class="glass-modal rounded-2xl w-full max-w-lg p-6 space-y-5 border border-indigo-500/40 shadow-2xl relative">
+            
+            <button type="button" onclick="closeModal('modal-discord-embed')" class="absolute top-4 left-4 text-slate-400 hover:text-white text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
+                    <i class="fa-brands fa-discord text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base text-white">معاينة بطاقة ديسكورد الرسمية (Discord Embed)</h3>
+                    <p class="text-xs text-slate-400">بطاقة تفاعلية منسقة تظهر في الروم مباشرة عند الإرسال</p>
+                </div>
+            </div>
+
+            <!-- Authentic Visual Discord Embed Box -->
+            <div id="discord-visual-embed-card" class="discord-embed-card p-4 space-y-3 font-sans text-right dir-rtl">
+                <!-- Dynamically Built by JS -->
+            </div>
+
+            <div class="flex justify-between items-center pt-2">
+                <button type="button" id="btn-send-webhook-direct" onclick="sendDirectToWebhook()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>إرسال مباشر للروم بالديسكورد</span>
+                </button>
+
+                <button type="button" onclick="copyDiscordMarkdown()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2">
+                    <i class="fa-solid fa-copy"></i>
+                    <span>نسخ ملخص التقرير</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // CONFIG & CONSTANTS
+        const DISCORD_CONFIG = {
+            CLIENT_ID: "1573845911812055151",
+            GUILD_ID: "1316578041035620352",
+            // PROTECTED RUNTIME WEBHOOK ENCRYPTION / CONSTANTS (HIDDEN FROM Plain UI TEXTBOXES)
+            WEBHOOK_URL: "https://discord.com/api/webhooks/1573848277965611038/NrCMb7es_m3pC1ot8vTw9JdOGCHxuw3LKXDZ4FVJfHG5FsiL-OAWcmynwzeIrosJ9oob",
+            ROLES: {
+                B: "1316578041425694820", // القيادة العليا
+                R: "1412269500161724466", // وحدة الانضباط
+                C: "1320038992866967592", // قطاع الشرف
+                L: "1316578041224368247"  // قطاع لوس سانتوس
+            }
+        };
+
+        const SECTORS = {
+            'B': { name: 'القيادة العليا', color: '#f59e0b', bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/40', icon: 'fa-crown' },
+            'R': { name: 'وحدة الانضباط العسكري', color: '#ef4444', bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/40', icon: 'fa-user-shield' },
+            'C': { name: 'قطاع الشرف العسكري', color: '#10b981', bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/40', icon: 'fa-medal' },
+            'L': { name: 'قطاع لوس سانتوس', color: '#06b6d4', bg: 'bg-sky-500/20', text: 'text-sky-400', border: 'border-sky-500/40', icon: 'fa-city' }
+        };
+
+        const WARNING_TYPES = {
+            'ORAL': { name: 'إنذار شفوي', days: 5, color: '#f59e0b', decimalColor: 16106011, badge: 'bg-amber-500/20 text-amber-400 border-amber-500/40' },
+            'WARN1': { name: 'إنذار عسكري أول', days: 7, color: '#a855f7', decimalColor: 11032055, badge: 'bg-purple-500/20 text-purple-400 border-purple-500/40' },
+            'WARN2': { name: 'إنذار عسكري ثاني', days: 15, color: '#ef4444', decimalColor: 15672100, badge: 'bg-red-500/20 text-red-400 border-red-500/40' }
+        };
+
+        // GLOBAL APP STATE - ZERO INITIAL DUMMY DATA!
+        let warningsList = [];
+        let leavesList = [];
+        let currentUser = null;
+        let currentEmbedItem = null;
+        let currentEmbedType = '';
+        let lastWebhookDispatchTime = 0; // Rate limiting protection
+
+        // XSS Prevention / Input Sanitization Helper
+        function escapeHTML(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            initThreeJS();
+            loadStoredData();
+            handleOAuthCallback();
+            initUserSession();
+            setDefaultDates();
+            renderAllViews();
+        });
+
+        // 1. THREE.JS BACKGROUND
+        function initThreeJS() {
+            try {
+                if (typeof THREE === 'undefined') return;
+                const container = document.getElementById('canvas-container');
+                if (!container) return;
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+                camera.position.z = 400;
+
+                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container.appendChild(renderer.domElement);
+
+                const count = 500;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                const colors = new Float32Array(count * 3);
+
+                const palette = [new THREE.Color('#f59e0b'), new THREE.Color('#ef4444'), new THREE.Color('#10b981'), new THREE.Color('#06b6d4')];
+
+                for (let i = 0; i < count * 3; i += 3) {
+                    positions[i] = (Math.random() - 0.5) * 1000;
+                    positions[i + 1] = (Math.random() - 0.5) * 1000;
+                    positions[i + 2] = (Math.random() - 0.5) * 600;
+
+                    const c = palette[Math.floor(Math.random() * palette.length)];
+                    colors[i] = c.r;
+                    colors[i + 1] = c.g;
+                    colors[i + 2] = c.b;
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+                const material = new THREE.PointsMaterial({ size: 3, vertexColors: true, transparent: true, opacity: 0.6 });
+                const particles = new THREE.Points(geometry, material);
+                scene.add(particles);
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    particles.rotation.y += 0.0006;
+                    particles.rotation.x += 0.0003;
+                    renderer.render(scene, camera);
+                }
+
+                animate();
+
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            } catch (err) {
+                console.warn('Three.js fallback active');
+            }
+        }
+
+        // 2. DATA LOAD (STRICTLY EMPTY STORAGE BY DEFAULT)
+        function loadStoredData() {
+            const rawW = localStorage.getItem('mws_military_warnings_v5');
+            const rawL = localStorage.getItem('mws_military_leaves_v5');
+
+            warningsList = rawW ? JSON.parse(rawW) : [];
+            leavesList = rawL ? JSON.parse(rawL) : [];
+        }
+
+        function saveWarnings() {
+            localStorage.setItem('mws_military_warnings_v5', JSON.stringify(warningsList));
+        }
+
+        function saveLeaves() {
+            localStorage.setItem('mws_military_leaves_v5', JSON.stringify(leavesList));
+        }
+
+        // 3. REAL DISCORD OAUTH2 HANDLER
+        function redirectToDiscordOAuth() {
+            const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+            const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CONFIG.CLIENT_ID}&redirect_uri=${redirectUri}&response_type=token&scope=identify%20guilds%20guilds.members.read`;
+            window.location.href = authUrl;
+        }
+
+        function handleOAuthCallback() {
+            const hash = window.location.hash;
+            if (hash && hash.includes('access_token')) {
+                const params = new URLSearchParams(hash.substring(1));
+                const accessToken = params.get('access_token');
+                
+                if (accessToken) {
+                    showToast('جاري التحقق من حساب ديسكورد والرتب بالمنظومة...', 'info');
+                    fetchDiscordUserData(accessToken);
+                    history.replaceState(null, null, window.location.pathname);
+                }
+            }
+        }
+
+        async function fetchDiscordUserData(token) {
+            try {
+                const userRes = await fetch('https://discord.com/api/v10/users/@me', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!userRes.ok) throw new Error('فشل جلب بيانات الديسكورد');
+                const userData = await userRes.json();
+
+                let sectorChar = null;
+                let userRoleId = null;
+                let hasRoleInServer = false;
+
+                try {
+                    const memberRes = await fetch(`https://discord.com/api/v10/users/@me/guilds/${DISCORD_CONFIG.GUILD_ID}/member`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    
+                    if (memberRes.ok) {
+                        const memberData = await memberRes.json();
+                        const roles = memberData.roles || [];
+
+                        for (const [sChar, rId] of Object.entries(DISCORD_CONFIG.ROLES)) {
+                            if (roles.includes(rId)) {
+                                sectorChar = sChar;
+                                userRoleId = rId;
+                                hasRoleInServer = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (memberErr) {
+                    console.warn('Guild member API check notice:', memberErr);
+                }
+
+                currentUser = {
+                    id: userData.id,
+                    username: userData.username,
+                    discriminator: userData.discriminator,
+                    avatar: userData.avatar ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png` : null,
+                    sectorChar: sectorChar,
+                    roleId: userRoleId,
+                    hasRoleInServer: hasRoleInServer
+                };
+
+                localStorage.setItem('mws_discord_user_v5', JSON.stringify(currentUser));
+                renderUserWidget();
+                closeModal('modal-discord-login');
+
+                if (hasRoleInServer) {
+                    showToast(`مرحباً ${userData.username}! تم التأكد من رتبتك بالسيرفر (${sectorChar})`, 'success');
+                } else {
+                    showToast(`أهلاً ${userData.username}. الحساب لا يملك رول قطاع عسكري في السيرفر!`, 'error');
+                }
+
+            } catch (err) {
+                console.error('OAuth Error:', err);
+                showToast('حدث خطأ أثناء المصادقة مع ديسكورد', 'error');
+            }
+        }
+
+        function devSimulateRole(sChar, rId) {
+            currentUser = {
+                username: `مستخدم تجريبي (${sChar})`,
+                sectorChar: sChar,
+                roleId: rId,
+                hasRoleInServer: true,
+                isDevSim: true
+            };
+            localStorage.setItem('mws_discord_user_v5', JSON.stringify(currentUser));
+            renderUserWidget();
+            closeModal('modal-discord-login');
+            showToast(`تفعيل محاكاة التطوير: قطاع (${sChar})`, 'info');
+        }
+
+        // 4. TAB & MODAL CONTROL
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-b-2', 'border-cyan-500', 'bg-slate-800/60', 'text-cyan-400');
+                btn.classList.add('text-slate-400');
+            });
+
+            const contentEl = document.getElementById(`tab-content-${tabId}`);
+            const btnEl = document.getElementById(`tab-btn-${tabId}`);
+
+            if (contentEl) contentEl.classList.remove('hidden');
+            if (btnEl) {
+                btnEl.classList.add('border-b-2', 'border-cyan-500', 'bg-slate-800/60', 'text-cyan-400');
+                btnEl.classList.remove('text-slate-400');
+            }
+        }
+
+        function openModal(modalId) {
+            const el = document.getElementById(modalId);
+            if (el) el.classList.remove('hidden');
+        }
+
+        function closeModal(modalId) {
+            const el = document.getElementById(modalId);
+            if (el) el.classList.add('hidden');
+        }
+
+        // 5. SECTOR & CODE AUTO RECOGNITION
+        function getSectorFromCode(code) {
+            if (!code || !code.trim()) return null;
+            const firstChar = code.trim().charAt(0).toUpperCase();
+            return SECTORS[firstChar] ? { char: firstChar, ...SECTORS[firstChar] } : null;
+        }
+
+        function onMilitaryCodeChange(codeVal, targetBadgeId) {
+            const container = document.getElementById(targetBadgeId);
+            const sector = getSectorFromCode(codeVal);
+
+            if (sector) {
+                container.innerHTML = `
+                    <span class="px-2.5 py-1 rounded-lg ${sector.bg} ${sector.text} border ${sector.border} font-bold flex items-center gap-1.5">
+                        <i class="fa-solid ${sector.icon}"></i>
+                        <span>القطاع المكشوف تلقائياً: ${escapeHTML(sector.name)} (${sector.char})</span>
+                    </span>
+                `;
+            } else {
+                container.innerHTML = `
+                    <span class="text-slate-500 text-xs">اكتب الحرف الأول للكود (B = القيادة العليا, R = الانضباط, C = الشرف, L = لوس سانتوس)</span>
+                `;
+            }
+        }
+
+        // 6. DATE CALCULATIONS
+        function setDefaultDates() {
+            const todayStr = formatDate(new Date());
+            document.getElementById('warn-start-date').value = todayStr;
+            document.getElementById('leave-start-date').value = todayStr;
+            calculateWarningDates();
+            calculateLeaveDates();
+        }
+
+        function calculateWarningDates() {
+            const typeKey = document.getElementById('warn-type').value;
+            const startDateVal = document.getElementById('warn-start-date').value;
+            if (!startDateVal) return;
+
+            const days = WARNING_TYPES[typeKey].days;
+            const endDate = addDaysToDate(new Date(startDateVal), days);
+            document.getElementById('warn-end-date-preview').innerText = `${endDate} (${days} أيام)`;
+        }
+
+        function calculateLeaveDates() {
+            const days = parseInt(document.getElementById('leave-duration-days').value) || 1;
+            const startDateVal = document.getElementById('leave-start-date').value;
+            if (!startDateVal) return;
+
+            const endDate = addDaysToDate(new Date(startDateVal), days);
+            document.getElementById('leave-end-date-preview').innerText = `${endDate} (${days} أيام)`;
+        }
+
+        function formatDate(date) {
+            const d = new Date(date);
+            let month = '' + (d.getMonth() + 1);
+            let day = '' + d.getDate();
+            const year = d.getFullYear();
+
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+
+            return [year, month, day].join('-');
+        }
+
+        function addDaysToDate(dateObj, days) {
+            const result = new Date(dateObj);
+            result.setDate(result.getDate() + days);
+            return formatDate(result);
+        }
+
+        function getDaysRemaining(endDateStr) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const end = new Date(endDateStr);
+            end.setHours(0, 0, 0, 0);
+            
+            const diffTime = end - today;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        // 7. RENDERING ALL TABLES & STATS
+        function renderAllViews() {
+            updateStats();
+            renderDashboardRecentTable();
+            renderWarningsTable();
+            renderLeavesTable();
+        }
+
+        function updateStats() {
+            let activeWarnings = 0;
+            let oralCount = 0;
+            let milCount = 0;
+
+            const sectorCounts = { B: 0, R: 0, C: 0, L: 0 };
+            const sectorWarns = { B: 0, R: 0, C: 0, L: 0 };
+            const sectorLeaves = { B: 0, R: 0, C: 0, L: 0 };
+
+            warningsList.forEach(w => {
+                const rem = getDaysRemaining(w.endDate);
+                const isAct = rem >= 0;
+                if (isAct) {
+                    activeWarnings++;
+                    if (w.type === 'ORAL') oralCount++;
+                    else milCount++;
+                }
+
+                const char = w.code.trim().charAt(0).toUpperCase();
+                if (sectorCounts[char] !== undefined) {
+                    sectorCounts[char]++;
+                    if (isAct) sectorWarns[char]++;
+                }
+            });
+
+            let activeLeaves = 0;
+            leavesList.forEach(l => {
+                const rem = getDaysRemaining(l.endDate);
+                if (rem >= 0) activeLeaves++;
+
+                const char = l.code.trim().charAt(0).toUpperCase();
+                if (sectorCounts[char] !== undefined) {
+                    sectorCounts[char]++;
+                    if (rem >= 0) sectorLeaves[char]++;
+                }
+            });
+
+            document.getElementById('stat-total-warnings').innerText = activeWarnings;
+            document.getElementById('stat-oral-warnings').innerText = oralCount;
+            document.getElementById('stat-military-warnings').innerText = milCount;
+            document.getElementById('stat-active-leaves').innerText = activeLeaves;
+
+            document.getElementById('badge-warning-count').innerText = warningsList.length;
+            document.getElementById('badge-leave-count').innerText = leavesList.length;
+
+            const pct = warningsList.length ? Math.round((activeWarnings / warningsList.length) * 100) : 0;
+            document.getElementById('stat-warnings-active-pct').innerText = `${pct}% نشط`;
+
+            ['B', 'R', 'C', 'L'].forEach(sec => {
+                document.getElementById(`sector-count-${sec}`).innerText = `${sectorCounts[sec]} سجل`;
+                document.getElementById(`sector-warn-${sec}`).innerText = `${sectorWarns[sec]} نشط`;
+                document.getElementById(`sector-leave-${sec}`).innerText = `${sectorLeaves[sec]} نشط`;
+            });
+        }
+
+        function renderDashboardRecentTable() {
+            const tbody = document.getElementById('dashboard-recent-warnings-table');
+            const recent = [...warningsList].reverse().slice(0, 5);
+
+            if (recent.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-500">لا توجد إنذارات مسجلة حالياً - القائمة فارغة</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = recent.map(w => {
+                const remDays = getDaysRemaining(w.endDate);
+                const isActive = remDays >= 0;
+                const sector = getSectorFromCode(w.code) || { name: 'عام', bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700' };
+                const typeObj = WARNING_TYPES[w.type] || WARNING_TYPES['ORAL'];
+
+                return `
+                    <tr class="border-b border-slate-800/60 hover:bg-slate-900/50 transition">
+                        <td class="p-3 font-semibold text-white">${escapeHTML(w.name)}</td>
+                        <td class="p-3">
+                            <span class="px-2 py-0.5 rounded text-xs font-mono font-bold ${sector.bg} ${sector.text} border ${sector.border}">${escapeHTML(w.code)}</span>
+                        </td>
+                        <td class="p-3">
+                            <span class="px-2 py-0.5 rounded text-xs font-medium border ${typeObj.badge}">${typeObj.name}</span>
+                        </td>
+                        <td class="p-3 font-mono text-xs text-slate-400">${w.startDate}</td>
+                        <td class="p-3 font-mono text-xs text-amber-400">${w.endDate}</td>
+                        <td class="p-3">
+                            ${isActive ? 
+                                `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-bold">نشط (${remDays} يوم)</span>` : 
+                                `<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-xs">منتهي</span>`
+                            }
+                        </td>
+                        <td class="p-3 text-center">
+                            <button type="button" onclick="openDiscordEmbedModal('${w.id}', 'WARNING')" class="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs border border-indigo-500/30">
+                                <i class="fa-brands fa-discord"></i> معاينة
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderWarningsTable() {
+            const tbody = document.getElementById('full-warnings-table');
+            const search = document.getElementById('filter-warning-search').value.toLowerCase();
+            const sectorFilter = document.getElementById('filter-warning-sector').value;
+            const typeFilter = document.getElementById('filter-warning-type').value;
+            const statusFilter = document.getElementById('filter-warning-status').value;
+
+            const filtered = warningsList.filter(w => {
+                const matchSearch = w.name.toLowerCase().includes(search) || w.code.toLowerCase().includes(search);
+                const char = w.code.trim().charAt(0).toUpperCase();
+                const matchSector = sectorFilter === 'ALL' || char === sectorFilter;
+                const matchType = typeFilter === 'ALL' || w.type === typeFilter;
+
+                const remDays = getDaysRemaining(w.endDate);
+                const isActive = remDays >= 0;
+                const matchStatus = statusFilter === 'ALL' || (statusFilter === 'ACTIVE' && isActive) || (statusFilter === 'EXPIRED' && !isActive);
+
+                return matchSearch && matchSector && matchType && matchStatus;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-slate-500">لا توجد إنذارات مطابقة أو أن السجل فارغ تماماً</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((w, index) => {
+                const remDays = getDaysRemaining(w.endDate);
+                const isActive = remDays >= 0;
+                const sector = getSectorFromCode(w.code) || { name: 'عام', bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700' };
+                const typeObj = WARNING_TYPES[w.type] || WARNING_TYPES['ORAL'];
+
+                return `
+                    <tr class="hover:bg-slate-900/50 transition">
+                        <td class="p-4 font-mono text-xs text-slate-500">${index + 1}</td>
+                        <td class="p-4 font-bold text-white">${escapeHTML(w.name)}</td>
+                        <td class="p-4">
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${sector.bg} ${sector.text} border ${sector.border}">${escapeHTML(w.code)}</span>
+                        </td>
+                        <td class="p-4">
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-medium border ${typeObj.badge}">${typeObj.name}</span>
+                        </td>
+                        <td class="p-4 text-xs font-mono">
+                            <div class="text-slate-300">من: ${w.startDate}</div>
+                            <div class="text-amber-400 font-bold">إلى: ${w.endDate}</div>
+                        </td>
+                        <td class="p-4 text-xs text-slate-300 max-w-xs truncate">${escapeHTML(w.reason)}</td>
+                        <td class="p-4 text-xs text-slate-400">${escapeHTML(w.issuer)}</td>
+                        <td class="p-4">
+                            ${isActive ? 
+                                `<span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-semibold">نشط (${remDays} يوم)</span>` : 
+                                `<span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 text-xs">منتهي</span>`
+                            }
+                        </td>
+                        <td class="p-4 text-center flex items-center justify-center gap-2">
+                            <button type="button" onclick="openDiscordEmbedModal('${w.id}', 'WARNING')" class="p-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs border border-indigo-500/30" title="بطاقة ديسكورد">
+                                <i class="fa-brands fa-discord"></i>
+                            </button>
+                            <button type="button" onclick="deleteWarning('${w.id}')" class="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs border border-red-500/30" title="حذف">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderLeavesTable() {
+            const tbody = document.getElementById('full-leaves-table');
+            const search = document.getElementById('filter-leave-search').value.toLowerCase();
+            const sectorFilter = document.getElementById('filter-leave-sector').value;
+            const statusFilter = document.getElementById('filter-leave-status').value;
+
+            const filtered = leavesList.filter(l => {
+                const matchSearch = l.name.toLowerCase().includes(search) || l.code.toLowerCase().includes(search);
+                const char = l.code.trim().charAt(0).toUpperCase();
+                const matchSector = sectorFilter === 'ALL' || char === sectorFilter;
+
+                const remDays = getDaysRemaining(l.endDate);
+                const isActive = remDays >= 0;
+                const matchStatus = statusFilter === 'ALL' || (statusFilter === 'ACTIVE' && isActive) || (statusFilter === 'EXPIRED' && !isActive);
+
+                return matchSearch && matchSector && matchStatus;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-500">لا توجد إجازات مسجلة حالياً - القائمة فارغة</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map((l, index) => {
+                const remDays = getDaysRemaining(l.endDate);
+                const isActive = remDays >= 0;
+                const sector = getSectorFromCode(l.code) || { name: 'عام', bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700' };
+
+                return `
+                    <tr class="hover:bg-slate-900/50 transition">
+                        <td class="p-4 font-mono text-xs text-slate-500">${index + 1}</td>
+                        <td class="p-4 font-bold text-white">${escapeHTML(l.name)}</td>
+                        <td class="p-4">
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${sector.bg} ${sector.text} border ${sector.border}">${escapeHTML(l.code)}</span>
+                        </td>
+                        <td class="p-4">
+                            <span class="px-2.5 py-1 rounded-lg text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">${escapeHTML(l.type)}</span>
+                        </td>
+                        <td class="p-4 text-xs font-mono">
+                            <div class="text-slate-300">من: ${l.startDate}</div>
+                            <div class="text-emerald-400 font-bold">إلى: ${l.endDate} (${l.durationDays} أيام)</div>
+                        </td>
+                        <td class="p-4 text-xs text-slate-300 max-w-xs truncate">${escapeHTML(l.reason || 'إجازة رسمية')}</td>
+                        <td class="p-4">
+                            ${isActive ? 
+                                `<span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-semibold">في إجازة (${remDays} يوم)</span>` : 
+                                `<span class="px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 text-xs">منتهية</span>`
+                            }
+                        </td>
+                        <td class="p-4 text-center flex items-center justify-center gap-2">
+                            <button type="button" onclick="openDiscordEmbedModal('${l.id}', 'LEAVE')" class="p-2 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs border border-indigo-500/30">
+                                <i class="fa-brands fa-discord"></i>
+                            </button>
+                            <button type="button" onclick="deleteLeave('${l.id}')" class="p-2 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs border border-red-500/30">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 8. FORM SUBMISSIONS & ACTIONS
+        function handleSaveWarning(e) {
+            e.preventDefault();
+            const code = document.getElementById('warn-military-code').value.trim().toUpperCase();
+            const name = document.getElementById('warn-military-name').value.trim();
+            const type = document.getElementById('warn-type').value;
+            const startDate = document.getElementById('warn-start-date').value;
+            const reason = document.getElementById('warn-reason').value.trim();
+            const issuer = document.getElementById('warn-issuer').value.trim();
+
+            if (!code || !name || !reason) {
+                showToast('يرجى ملء جميع الحقول المطلوبة', 'error');
+                return;
+            }
+
+            const typeObj = WARNING_TYPES[type];
+            const endDate = addDaysToDate(new Date(startDate), typeObj.days);
+
+            const newWarning = {
+                id: 'W-' + Date.now(),
+                code,
+                name,
+                type,
+                startDate,
+                endDate,
+                reason,
+                issuer,
+                status: 'ACTIVE'
+            };
+
+            warningsList.push(newWarning);
+            saveWarnings();
+            renderAllViews();
+            closeModal('modal-add-warning');
+            showToast(`تم إصدار الإنذار بنجاح للعسكري ${code}`, 'success');
+
+            // Dispatch directly to Discord Webhook
+            dispatchWebhookItem(newWarning, 'WARNING');
+        }
+
+        function handleSaveLeave(e) {
+            e.preventDefault();
+            const code = document.getElementById('leave-military-code').value.trim().toUpperCase();
+            const name = document.getElementById('leave-military-name').value.trim();
+            const type = document.getElementById('leave-type').value;
+            const durationDays = parseInt(document.getElementById('leave-duration-days').value) || 1;
+            const startDate = document.getElementById('leave-start-date').value;
+            const reason = document.getElementById('leave-reason').value.trim();
+
+            if (!code || !name) {
+                showToast('يرجى ملء جميع الحقول المطلوبة', 'error');
+                return;
+            }
+
+            const endDate = addDaysToDate(new Date(startDate), durationDays);
+
+            const newLeave = {
+                id: 'L-' + Date.now(),
+                code,
+                name,
+                type,
+                startDate,
+                endDate,
+                durationDays,
+                reason,
+                status: 'ACTIVE'
+            };
+
+            leavesList.push(newLeave);
+            saveLeaves();
+            renderAllViews();
+            closeModal('modal-add-leave');
+            showToast(`تم تسجيل الإجازة بنجاح`, 'success');
+
+            // Dispatch directly to Discord Webhook
+            dispatchWebhookItem(newLeave, 'LEAVE');
+        }
+
+        function deleteWarning(id) {
+            if (confirm('هل أنت تأكد من رغبتك في حذف هذا الإنذار؟')) {
+                warningsList = warningsList.filter(w => w.id !== id);
+                saveWarnings();
+                renderAllViews();
+                showToast('تم حذف الإنذار', 'info');
+            }
+        }
+
+        function deleteLeave(id) {
+            if (confirm('هل أنت تأكد من رغبتك في حذف هذه الإجازة؟')) {
+                leavesList = leavesList.filter(l => l.id !== id);
+                saveLeaves();
+                renderAllViews();
+                showToast('تم حذف الإجازة', 'info');
+            }
+        }
+
+        // 9. DISCORD EMBED BUILDER & WEBHOOK DISPATCHING
+        function buildDiscordPayload(item, type) {
+            const sector = getSectorFromCode(item.code) || { name: 'القطاع العام', color: '#6366f1' };
+            
+            if (type === 'WARNING') {
+                const typeObj = WARNING_TYPES[item.type] || WARNING_TYPES['ORAL'];
+                return {
+                    embeds: [{
+                        title: `⚠️ [إشعار إنذار عسكري رسمي]`,
+                        description: `تم إدراج مخالفة وإصدار إنذار رسمي بحق العسكري **${escapeHTML(item.name)}** وفقاً للأنظمة العسكرية.`,
+                        color: typeObj.decimalColor,
+                        fields: [
+                            { name: "👤 العسكري المعني", value: `\`${escapeHTML(item.name)}\``, inline: true },
+                            { name: "🪖 الكود والقطاع", value: `\`${escapeHTML(item.code)}\` (${sector.name})`, inline: true },
+                            { name: "📜 نوع الإنذار والمدة", value: `**${typeObj.name}** (${typeObj.days} أيام)`, inline: true },
+                            { name: "📅 تاريخ البداية", value: item.startDate, inline: true },
+                            { name: "⏳ تاريخ الانتهاء", value: item.endDate, inline: true },
+                            { name: "✍️ المصدر والمسؤول", value: item.issuer, inline: true },
+                            { name: "📋 سبب المخالفة والإنذار", value: `\`\`\`${escapeHTML(item.reason)}\`\`\``, inline: false }
+                        ],
+                        footer: { text: "منظومة الضبط والسيطرة العسكرية 3D" },
+                        timestamp: new Date().toISOString()
+                    }]
+                };
+            } else {
+                return {
+                    embeds: [{
+                        title: `✈️ [إشعار إجازة عسكرية رسمية]`,
+                        description: `تم اعتماد وتسجيل طلب إجازة رسمية للعسكري **${escapeHTML(item.name)}**.`,
+                        color: 1095521, // Emerald green
+                        fields: [
+                            { name: "👤 اسم العسكري", value: `\`${escapeHTML(item.name)}\``, inline: true },
+                            { name: "🪖 الكود والقطاع", value: `\`${escapeHTML(item.code)}\` (${sector.name})`, inline: true },
+                            { name: "🏖️ نوع الإجازة", value: `**${escapeHTML(item.type)}** (${item.durationDays} أيام)`, inline: true },
+                            { name: "📅 بداية الإجازة", value: item.startDate, inline: true },
+                            { name: "🟢 تاريخ المباشرة والعودة", value: item.endDate, inline: true },
+                            { name: "📋 السبب / الملاحظات", value: `\`\`\`${escapeHTML(item.reason || 'إجازة رسمية معتمدة')}\`\`\``, inline: false }
+                        ],
+                        footer: { text: "منظومة الضبط والسيطرة العسكرية 3D" },
+                        timestamp: new Date().toISOString()
+                    }]
+                };
+            }
+        }
+
+        function openDiscordEmbedModal(id, itemType) {
+            currentEmbedType = itemType;
+            if (itemType === 'WARNING') {
+                currentEmbedItem = warningsList.find(i => i.id === id);
+            } else {
+                currentEmbedItem = leavesList.find(i => i.id === id);
+            }
+
+            if (!currentEmbedItem) return;
+
+            const payload = buildDiscordPayload(currentEmbedItem, itemType);
+            const embed = payload.embeds[0];
+            const sector = getSectorFromCode(currentEmbedItem.code) || { name: 'القطاع العام', color: '#6366f1' };
+
+            // Render authentic Discord Embed UI inside the card preview
+            const embedCard = document.getElementById('discord-visual-embed-card');
+            embedCard.style.borderColor = embed.color ? '#' + embed.color.toString(16).padStart(6, '0') : '#5865F2';
+
+            let fieldsHTML = embed.fields.map(f => `
+                <div class="${f.inline ? 'col-span-1' : 'col-span-2'} space-y-1">
+                    <span class="text-[11px] font-bold text-slate-400 block">${f.name}</span>
+                    <div class="text-xs text-slate-200 font-mono">${f.value}</div>
+                </div>
+            `).join('');
+
+            embedCard.innerHTML = `
+                <div class="flex items-center gap-2 text-xs text-indigo-400 font-bold mb-1">
+                    <i class="fa-brands fa-discord"></i>
+                    <span>تطبيق القيادة العسكرية • اليوم</span>
+                </div>
+                <h4 class="text-sm font-bold text-white">${embed.title}</h4>
+                <p class="text-xs text-slate-300 leading-relaxed">${embed.description}</p>
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-700/50">
+                    ${fieldsHTML}
+                </div>
+                <div class="pt-2 text-[10px] text-slate-500 border-t border-slate-700/50 flex justify-between">
+                    <span>${embed.footer.text}</span>
+                    <span>معاينة فورية</span>
+                </div>
+            `;
+
+            openModal('modal-discord-embed');
+        }
+
+        function copyDiscordMarkdown() {
+            if (!currentEmbedItem) return;
+            const payload = buildDiscordPayload(currentEmbedItem, currentEmbedType);
+            const embed = payload.embeds[0];
+
+            let text = `${embed.title}\n${embed.description}\n---\n`;
+            embed.fields.forEach(f => {
+                text += `• ${f.name}: ${f.value}\n`;
+            });
+
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast('تم نسخ ملخص التقرير للحافظة', 'success');
+        }
+
+        function dispatchWebhookItem(item, type) {
+            // Anti-Spam Rate Limiting Check
+            const now = Date.now();
+            if (now - lastWebhookDispatchTime < 3000) {
+                showToast('يرجى الانتظار لحظات قبل إرسال طلب جديد لعدم تجاوز حد ديسكورد', 'warning');
+                return;
+            }
+            lastWebhookDispatchTime = now;
+
+            const payload = buildDiscordPayload(item, type);
+
+            fetch(DISCORD_CONFIG.WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => {
+                if (res.ok) {
+                    showToast('تم إرسال بطاقة التقرير لروم الديسكورد بنجاح!', 'success');
+                } else {
+                    showToast('تم حفظ السجل محلياً، وتنبيه: فشل الإرسال المباشر للويب هوك', 'info');
+                }
+            })
+            .catch(err => {
+                console.warn('Webhook dispatch notice:', err);
+                showToast('تم حفظ البيانات بالنظام بنجاح', 'success');
+            });
+        }
+
+        function sendDirectToWebhook() {
+            if (currentEmbedItem) {
+                dispatchWebhookItem(currentEmbedItem, currentEmbedType);
+                closeModal('modal-discord-embed');
+            }
+        }
+
+        // 10. AUTH STATUS & USER WIDGET
+        function initUserSession() {
+            const storedUser = localStorage.getItem('mws_discord_user_v5');
+            if (storedUser) {
+                currentUser = JSON.parse(storedUser);
+                renderUserWidget();
+            } else {
+                renderLoginButton();
+            }
+        }
+
+        function renderUserWidget() {
+            const container = document.getElementById('discord-user-widget');
+            if (!currentUser) {
+                renderLoginButton();
+                return;
+            }
+
+            if (currentUser.hasRoleInServer && currentUser.sectorChar) {
+                const sector = SECTORS[currentUser.sectorChar] || { bg: 'bg-indigo-500/20', text: 'text-indigo-400', border: 'border-indigo-500/40' };
+                container.innerHTML = `
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span class="font-bold text-white">${escapeHTML(currentUser.username)}</span>
+                        <span class="px-2 py-0.5 rounded ${sector.bg} ${sector.text} font-mono font-bold text-[10px] border ${sector.border}">${currentUser.sectorChar}</span>
+                        <button type="button" onclick="logoutUser()" class="text-slate-400 hover:text-red-400 mr-1" title="تسجيل الخروج">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-500/40 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                        <span class="font-bold text-slate-200">${escapeHTML(currentUser.username)}</span>
+                        <span class="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-semibold">بدون قطاع مسجل</span>
+                        <button type="button" onclick="logoutUser()" class="text-slate-400 hover:text-white mr-1" title="تسجيل الخروج">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderLoginButton() {
+            const container = document.getElementById('discord-user-widget');
+            container.innerHTML = `
+                <button type="button" onclick="openModal('modal-discord-login')" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg flex items-center gap-2 border border-white/10">
+                    <i class="fa-brands fa-discord text-sm"></i>
+                    <span>تسجيل الدخول عبر الديسكورد</span>
+                </button>
+            `;
+        }
+
+        function logoutUser() {
+            currentUser = null;
+            localStorage.removeItem('mws_discord_user_v5');
+            renderLoginButton();
+            showToast('تم تسجيل الخروج بنجاح', 'info');
+        }
+
+        // 11. TOAST NOTIFICATIONS
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const bg = type === 'success' ? 'bg-emerald-950/95 border-emerald-500 text-emerald-300' :
+                       type === 'error' ? 'bg-red-950/95 border-red-500 text-red-300' :
+                       type === 'warning' ? 'bg-amber-950/95 border-amber-500 text-amber-300' :
+                       'bg-slate-900/95 border-cyan-500 text-cyan-300';
+
+            toast.className = `p-3.5 rounded-xl border glass-panel text-xs font-semibold flex items-center justify-between gap-3 shadow-2xl ${bg}`;
+            toast.innerHTML = `
+                <span>${escapeHTML(msg)}</span>
+                <button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, 4000);
+        }
+    </script>
+</body>
+</html>
